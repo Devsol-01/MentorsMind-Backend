@@ -16,7 +16,7 @@ Backend API server for the MentorMinds Stellar platform, built with Node.js, Exp
 
 ## 📋 Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 20+ and npm
 - PostgreSQL 14+
 - Stellar account (testnet for development)
 
@@ -183,6 +183,8 @@ npm test
 2. Make your changes
 3. Run tests and linting
 4. Submit a pull request
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming and PR conventions.
 
 ## 📄 License
 
