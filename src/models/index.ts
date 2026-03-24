@@ -3,9 +3,11 @@ import { ExportJobModel } from './export-job.model';
 import { SessionModel } from './session.model';
 import { PaymentModel } from './payment.model';
 import { ReviewModel } from './review.model';
-import { WalletModel } from './wallet.model';
-import { PayoutRequestModel } from './payout-request.model';
-import { WalletEventModel } from './wallet-event.model';
+import { NotificationsModel } from './notifications.model';
+import { NotificationPreferencesModel } from './notification-preferences.model';
+import { NotificationTemplatesModel } from './notification-templates.model';
+import { NotificationDeliveryTrackingModel } from './notification-delivery-tracking.model';
+import { NotificationAnalyticsModel } from './notification-analytics.model';
 
 export const initializeModels = async () => {
   try {
@@ -14,9 +16,11 @@ export const initializeModels = async () => {
     await SessionModel.initializeTable();
     await PaymentModel.initializeTable();
     await ReviewModel.initializeTable();
-    await WalletModel.initializeTable();
-    await PayoutRequestModel.initializeTable();
-    await WalletEventModel.initializeTable();
+    await NotificationsModel.initializeTable();
+    await NotificationPreferencesModel.initializeTable();
+    await NotificationTemplatesModel.initializeTable();
+    await NotificationDeliveryTrackingModel.initializeTable();
+    await NotificationAnalyticsModel.initializeTable();
     console.log('✅ All database tables initialized');
   } catch (error) {
     console.error('❌ Database initialization failed:', error);
