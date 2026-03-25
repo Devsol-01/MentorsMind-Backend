@@ -1,15 +1,35 @@
 import { Router } from 'express';
 import { ResponseUtil } from '../utils/response.utils';
-import { asyncHandler } from '../utils/asyncHandler.utils';
-import { HealthController } from '../controllers/health.controller';
-import HealthService from '../services/health.service';
-import v1Routes from './v1';
-import { CURRENT_VERSION, SUPPORTED_VERSIONS } from '../config/api-versions.config';
+import authRoutes from './auth.routes';
+import usersRoutes from './users.routes';
+import exportRoutes from './export.routes';
+import adminRoutes from './admin.routes';
+import bookingsRoutes from './bookings.routes';
+import timezoneRoutes from './timezone.routes';
+import paymentsRoutes from './payments.routes';
+import { AdminService } from '../services/admin.service';
+import { BookingsService } from '../services/bookings.service';
 
 const router = Router();
 
-// ── v1 routes ────────────────────────────────────────────────────────────────
-router.use('/', v1Routes);
+// Initialize admin tables (async, don't block)
+AdminService.initialize().catch((err) => {
+  console.error('Failed to initialize admin tables:', err);
+});
+
+// Initialize bookings tables (async, don't block)
+BookingsService.initialize().catch(err => {
+  console.error('Failed to initialize bookings tables:', err);
+});
+
+// Mount route modules
+router.use('/auth', authRoutes);
+router.use('/users', usersRoutes);
+router.use('/', exportRoutes);
+router.use('/admin', adminRoutes);
+router.use('/bookings', bookingsRoutes);
+router.use('/timezones', timezoneRoutes);
+router.use('/payments', paymentsRoutes);
 
 // ── Root info ────────────────────────────────────────────────────────────────
 /**
