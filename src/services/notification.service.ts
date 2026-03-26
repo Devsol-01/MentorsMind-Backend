@@ -383,7 +383,7 @@ The MentorMinds Team
     try {
       await NotificationAnalyticsModel.incrementMetric(today, type, channel, metric);
     } catch (error) {
-      console.error('Failed to update notification analytics:', error);
+      logger.error('Failed to update notification analytics', { error });
     }
   },
 
@@ -408,7 +408,7 @@ The MentorMinds Team
         deliveryHistory,
       };
     } catch (error) {
-      console.error('Failed to get notification status:', error);
+      logger.error('Failed to get notification status', { error });
       return null;
     }
   },
@@ -429,7 +429,7 @@ The MentorMinds Team
 
       return null;
     } catch (error) {
-      console.error('Failed to schedule notification:', error);
+      logger.error('Failed to schedule notification', { error });
       return null;
     }
   },
@@ -441,7 +441,7 @@ The MentorMinds Team
     try {
       return await NotificationsModel.delete(notificationId);
     } catch (error) {
-      console.error('Failed to cancel scheduled notification:', error);
+      logger.error('Failed to cancel scheduled notification', { error });
       return false;
     }
   },
@@ -468,7 +468,7 @@ The MentorMinds Team
 
       return true;
     } catch (error) {
-      console.error('Failed to retry notification:', error);
+      logger.error('Failed to retry notification', { error });
       return false;
     }
   },
@@ -653,7 +653,7 @@ The MentorMinds Team
     try {
       return await NotificationsModel.deleteExpired();
     } catch (error) {
-      console.error('Failed to cleanup expired notifications:', error);
+      logger.error('Failed to cleanup expired notifications', { error });
       return 0;
     }
   },
@@ -669,7 +669,7 @@ The MentorMinds Team
     try {
       return await NotificationDeliveryTrackingModel.getDeliveryStats(startDate, endDate, channel);
     } catch (error) {
-      console.error('Failed to get delivery statistics:', error);
+      logger.error('Failed to get delivery statistics', { error });
       return [];
     }
   },
@@ -681,7 +681,7 @@ The MentorMinds Team
     try {
       return await NotificationDeliveryTrackingModel.getFailedDeliveries(limit, olderThan);
     } catch (error) {
-      console.error('Failed to get failed notifications for retry:', error);
+      logger.error('Failed to get failed notifications for retry', { error });
       return [];
     }
   },

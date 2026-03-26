@@ -24,7 +24,7 @@ initializeModels()
 
 // Start background job workers and scheduler
 startScheduler().catch((err) => {
-  console.error('Failed to start job scheduler:', err);
+  logger.error('Failed to start job scheduler', { error: err });
 });
 
 const { port: PORT, apiVersion: API_VERSION } = config.server;
@@ -32,12 +32,14 @@ const NODE_ENV = config.env;
 
 // Start server
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📝 Environment: ${NODE_ENV}`);
-  console.log(`🌐 API URL: http://localhost:${PORT}/api/${API_VERSION}`);
-  console.log(`💚 Health check: http://localhost:${PORT}/health`);
-  console.log(`📚 API Docs: http://localhost:${PORT}/api/${API_VERSION}/docs`);
-  console.log(`🔌 WebSocket: ws://localhost:${PORT}/ws`);
+  logger.info('Server started', {
+    port: PORT,
+    env: NODE_ENV,
+    apiUrl: `http://localhost:${PORT}/api/${API_VERSION}`,
+    healthCheck: `http://localhost:${PORT}/health`,
+    apiDocs: `http://localhost:${PORT}/api/${API_VERSION}/docs`,
+    webSocket: `ws://localhost:${PORT}/ws`,
+  });
 });
 
 // Attach WebSocket server to the same HTTP server
@@ -58,7 +60,7 @@ async function shutdown(signal: string) {
     stopScheduler(),
   ]);
   server.close(() => {
-    console.log('HTTP server closed');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
 }
