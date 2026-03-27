@@ -252,7 +252,7 @@ export const WalletsController = {
       }
 
       // Create trustline operation (this doesn't submit it, just creates the operation)
-      const trustlineOperation = stellarService.createTrustlineOperation(
+      const _trustlineOperation = stellarService.createTrustlineOperation(
         assetCode,
         assetIssuer,
         limit

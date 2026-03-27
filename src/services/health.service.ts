@@ -1,10 +1,10 @@
 import pool from '../config/database';
 import { server } from '../config/stellar';
-import monitoringConfig, { MonitoringConfig } from '../config/monitoring.config';
+import monitoringConfig from '../config/monitoring.config';
 import { redisConfig } from '../config/redis.config';
 import { logger } from '../utils/logger.utils';
 import { collectCacheMetrics } from '../utils/cache-metrics.utils';
-import promClient, { Registry, Gauge, Histogram, Counter } from 'prom-client';
+import promClient, { Registry, Gauge } from 'prom-client';
 import config from '../config';
 import { CURRENT_VERSION } from '../config/api-versions.config';
 import * as os from 'node:os';
@@ -142,7 +142,7 @@ async function checkRedis(): Promise<HealthComponent | undefined> {
     const client = await getRedisHealthClient();
     if (!client) return { status: 'degraded' as const, responseTimeMs: 0, details: { fallback: 'memory' } };
     
-    const [[resTime], memoryInfo] = await Promise.all([
+    const [, memoryInfo] = await Promise.all([
       client.ping() as any,
       client.info('memory') as any
     ]);
