@@ -1,5 +1,6 @@
 import { reportQueue } from '../queues/report.queue';
 import { sessionReminderQueue } from '../queues/sessionReminder.queue';
+import { notificationCleanupQueue } from '../queues/notificationCleanup.queue';
 import { VerificationService } from '../services/verification.service';
 import { logger } from '../utils/logger.utils';
 
@@ -33,12 +34,20 @@ export async function startScheduler(): Promise<void> {
     },
   );
 
-  logger.info('Job scheduler started — weekly earnings report and session reminders registered');
+  // Notification cleanup — daily at 02:00 UTC (delete expired notifications)
+  await notificationCleanupQueue.add(
+    'notification-cleanup-scheduled',
+    { jobType: 'notification-cleanup' },
+    {
+      repeat: { pattern: '0 2 * * *' },
+      jobId: 'notification-cleanup-recurring',
+    },
+  );
+
+  logger.info('Job scheduler started — weekly earnings, session reminders, notification cleanup registered');
 }
 
 export async function stopScheduler(): Promise<void> {
-  // Remove repeatable jobs on shutdown (optional — comment out to persist across restarts)
-  // await reportQueue.removeRepeatable('weekly-earnings-scheduled', { pattern: '0 8 * * 1' });
   logger.info('Job scheduler stopped');
 }
 
@@ -50,10 +59,4 @@ export async function runMaintenanceTasks(): Promise<void> {
   if (expired > 0) {
     logger.info('Maintenance: expired verifications flagged', { count: expired });
   }
-}
-
-export async function stopScheduler(): Promise<void> {
-  // Remove repeatable jobs on shutdown (optional — comment out to persist across restarts)
-  // await reportQueue.removeRepeatable('weekly-earnings-scheduled', { pattern: '0 8 * * 1' });
-  logger.info('Job scheduler stopped');
 }

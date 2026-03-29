@@ -11,6 +11,7 @@ import {
   escrowReleaseWorker,
   reportWorker,
   sessionReminderWorker,
+  notificationCleanupWorker,
   startScheduler,
   stopScheduler,
 } from './workers';
@@ -61,6 +62,7 @@ async function shutdown(signal: string) {
     escrowReleaseWorker.close(),
     reportWorker.close(),
     sessionReminderWorker.close(),
+    notificationCleanupWorker.close(),
     stopScheduler(),
   ]);
   server.close(() => {
