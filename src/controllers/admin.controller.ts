@@ -4,7 +4,10 @@ import { AdminService } from "../services/admin.service";
 import { ResponseUtil } from "../utils/response.utils";
 import { AuditLogService, extractIpAddress } from "../services/auditLog.service";
 import { LoginAttemptsService } from "../services/loginAttempts.service";
+import { IpFilterService } from "../services/ipFilter.service";
 import pool from "../config/database";
+import { keyRotationJob } from "../jobs/keyRotation.job";
+import { accountDeletionService } from "../services/accountDeletion.service";
 
 export const AdminController = {
   /** GET /admin/stats */
@@ -236,6 +239,22 @@ export const AdminController = {
     ResponseUtil.success(res, null, "Configuration updated successfully");
   },
 
+  async rotateEncryptionKey(
+    _req: AuthenticatedRequest,
+    res: Response,
+  ): Promise<void> {
+    const result = await keyRotationJob.run();
+    ResponseUtil.success(res, result, "Encryption key rotation job completed");
+  },
+
+  async listDeletionRequests(
+    _req: AuthenticatedRequest,
+    res: Response,
+  ): Promise<void> {
+    const requests = await accountDeletionService.listDeletionRequests();
+    ResponseUtil.success(res, { requests }, "Deletion requests retrieved successfully");
+  },
+
   /** GET /admin/audit-log */
   async getAuditLogs(req: AuthenticatedRequest, res: Response): Promise<void> {
     const page = parseInt(req.query.page as string) || 1;
@@ -335,5 +354,97 @@ export const AdminController = {
     });
 
     ResponseUtil.success(res, { userId, email }, 'Account unlocked successfully');
+  },
+
+  /** POST /admin/email/preview/:template — preview rendered email template */
+  async previewEmailTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const templateName = req.params.template as string;
+    const sampleData = req.body || {};
+
+    if (!templateName) {
+      ResponseUtil.error(res, 'Template name is required', 400);
+      return;
+    }
+
+    try {
+      // Import template engine service
+      const { TemplateEngineService } = await import('../services/template-engine.service');
+
+      // Render the template with sample data
+      const rendered = await TemplateEngineService.renderEmail(templateName, sampleData);
+
+      ResponseUtil.success(res, {
+        template: templateName,
+        subject: rendered.subject,
+        html: rendered.htmlContent,
+        text: rendered.textContent,
+        sampleData,
+      }, 'Email template preview generated successfully');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      ResponseUtil.error(res, `Failed to preview template: ${errorMessage}`, 500);
+  /** POST /admin/security/blocklist */
+  async addBlocklistRule(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { ipRange, reason } = req.body;
+    if (!ipRange) {
+        ResponseUtil.error(res, "ipRange is required", 400);
+        return;
+    }
+
+    try {
+        const rule = await IpFilterService.addRule({
+            ipRange,
+            ruleType: 'block',
+            context: 'global',
+            reason,
+            adminId: req.user!.id,
+            ipAddress: extractIpAddress(req),
+        });
+        ResponseUtil.success(res, rule, "IP successfully blocked", 201);
+    } catch (err: any) {
+        ResponseUtil.error(res, err.message, 400);
+    }
+  },
+
+  /** DELETE /admin/security/blocklist/:id */
+  async removeBlocklistRule(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+    const removed = await IpFilterService.removeRule(id as string, req.user!.id, extractIpAddress(req));
+    
+    if (!removed) {
+        ResponseUtil.notFound(res, "IP rule not found");
+        return;
+    }
+    ResponseUtil.success(res, null, "IP rule successfully removed");
+  },
+
+  /** GET /admin/security/blocklist */
+  async listBlocklistRules(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const rules = await IpFilterService.getRules();
+    const blocklist = rules.filter(r => r.rule_type === 'block' && r.context === 'global');
+    ResponseUtil.success(res, blocklist, "Blocklist retrieved successfully");
+  },
+
+  /** POST /admin/security/allowlist */
+  async addAdminAllowlistRule(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { ipRange, reason } = req.body;
+    if (!ipRange) {
+        ResponseUtil.error(res, "ipRange is required", 400);
+        return;
+    }
+
+    try {
+        const rule = await IpFilterService.addRule({
+            ipRange,
+            ruleType: 'allow',
+            context: 'admin',
+            reason,
+            adminId: req.user!.id,
+            ipAddress: extractIpAddress(req),
+        });
+        ResponseUtil.success(res, rule, "Admin allowlist rule added successfully", 201);
+    } catch (err: any) {
+        ResponseUtil.error(res, err.message, 400);
+    }
   },
 };

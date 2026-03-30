@@ -11,6 +11,7 @@ import paymentsRoutes from "./payments.routes";
 import reviewsRoutes from "./reviews.routes";
 import conversationsRoutes from "./conversations.routes";
 import messageSearchRoutes from "./messageSearch.routes";
+import integrationsRoutes from "./integrations.routes";
 import { AdminService } from "../services/admin.service";
 import { BookingsService } from "../services/bookings.service";
 import { VerificationService } from "../services/verification.service";
@@ -59,6 +60,7 @@ router.use("/payments", paymentsRoutes);
 router.use("/reviews", reviewsRoutes);
 router.use("/conversations", conversationsRoutes);
 router.use("/messages", messageSearchRoutes);
+router.use("/integrations", integrationsRoutes);
 
 // JWKS public endpoint — no auth required
 router.get("/.well-known/jwks.json", asyncHandler(JwksController.getJwks));
@@ -95,42 +97,6 @@ router.get("/", (_req, res) => {
 });
 
 // ── Health ───────────────────────────────────────────────────────────────────
-/**
- * @swagger
- * /health:
- *   get:
- *     summary: Service health check
- *     tags: [Health]
- *     responses:
- *       200:
- *         description: Service is healthy
- */
-router.get("/health", HealthController.getHealth);
-
-/**
- * @swagger
- * /ready:
- *   get:
- *     summary: Service readiness check
- *     tags: [Health]
- *     responses:
- *       200:
- *         description: Service is ready
- *       503:
- *         description: Service not ready
- */
-router.get(
-  "/ready",
-  asyncHandler(async (_req, res) => {
-    const health = await HealthService.checkHealth();
-    const isReady = health.overall === "healthy";
-    ResponseUtil.success(
-      res,
-      { ...health, isReady },
-      isReady ? "Service is ready" : "Service degraded",
-      isReady ? 200 : 503,
-    );
-  }),
-);
+// Health routes moved to app.ts for global accessibility
 
 export default router;

@@ -4,11 +4,13 @@ import { AnalyticsController } from "../controllers/analytics.controller";
 import { ModerationController } from "../controllers/moderation.controller";
 import { VerificationController } from "../controllers/verification.controller";
 import { RevenueReportController } from "../controllers/revenueReport.controller";
+import { JwksController } from "../controllers/jwks.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { requireAdmin } from "../middleware/admin-auth.middleware";
 import { validate } from "../middleware/validation.middleware";
 import { asyncHandler } from "../utils/asyncHandler.utils";
 import { logger } from "../utils/logger.utils";
+import { adminAllowlistMiddleware } from "../middleware/ipFilter.middleware";
 import {
   rejectVerificationSchema,
   requestMoreInfoSchema,
@@ -16,13 +18,15 @@ import {
 } from "../validators/schemas/verification.schemas";
 import { ConsentController } from "../controllers/consent.controller";
 import { refreshAnalyticsJob } from "../jobs/refreshAnalytics.job";
+import { JwksController } from "../controllers/jwks.controller";
 
 const router = Router();
 
 router.use(authenticate);
 router.use(requireAdmin);
+router.use(asyncHandler(adminAllowlistMiddleware));
 refreshAnalyticsJob.initialize().catch((error: unknown) => {
-  logger.error("Failed to initialize hourly analytics refresh job", { error });
+  logger.error({ error }, "Failed to initialize hourly analytics refresh job");
 });
 
 /**
@@ -212,6 +216,14 @@ router.post("/users/:id/unlock", asyncHandler(AdminController.unlockUser));
  *         description: Admin role required
  */
 router.post("/auth/rotate-keys", asyncHandler(JwksController.rotateKeys));
+router.post(
+  "/security/rotate-encryption-key",
+  asyncHandler(AdminController.rotateEncryptionKey),
+);
+router.get(
+  "/deletion-requests",
+  asyncHandler(AdminController.listDeletionRequests),
+);
 
 /**
  * @swagger
@@ -580,6 +592,104 @@ router.get(
  */
 router.get("/audit-log/stats", asyncHandler(AdminController.getAuditLogStats));
 
+// ── Email Template Routes ──────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/email/preview/{template}:
+ *   post:
+ *     summary: Preview rendered email template
+ *     description: Render an email template with sample data for preview purposes
+ *     tags: [Admin, Email]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: template
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *         description: Template name (e.g., welcome, booking-confirmed, payment-received)
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: true
+ *           example:
+ *             userName: "John Doe"
+ *             mentorName: "Jane Smith"
+ *             sessionDate: "2024-03-15"
+ *             sessionTime: "10:00 AM"
+ *     responses:
+ *       200:
+ *         description: Rendered template preview
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         template: { type: string }
+ *                         subject: { type: string }
+ *                         html: { type: string }
+ *                         text: { type: string }
+ *       400:
+ *         description: Template name is required
+ *       500:
+ *         description: Failed to render template
+ */
+router.post("/email/preview/:template", asyncHandler(AdminController.previewEmailTemplate));
+
+// ── Audit Log Routes ─────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/audit-log:
+ *   get:
+ *     summary: Query audit logs with filtering and pagination
+ *     tags: [Admin, Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 50 }
+ *       - name: userId
+ *         in: query
+ *         schema: { type: string, format: uuid }
+ *         description: Filter by user ID
+ *       - name: action
+ *         in: query
+ *         schema: { type: string }
+ *         description: Filter by action type
+ *       - name: resourceType
+ *         in: query
+ *         schema: { type: string }
+ *         description: Filter by resource type
+ *       - name: startDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *       - name: endDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Paginated audit logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ */
+router.get("/audit-log", asyncHandler(AdminController.getAuditLogs));
+
 // ── Analytics Routes ─────────────────────────────────────────────────────────
 
 /**
@@ -814,10 +924,83 @@ router.get(
  *       200:
  *         description: CSV export generated
  */
-router.get(
-  "/reports/export",
-  asyncHandler(RevenueReportController.exportReport),
-);
+router.get("/reports/export", asyncHandler(AdminController.exportAuditLogs));
+
+// ── Security Management Routes ───────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/security/blocklist:
+ *   get:
+ *     summary: List all blocked IP ranges
+ *     tags: [Admin, Security]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of blocked IP rules
+ *   post:
+ *     summary: Add an IP or CIDR to the global blocklist
+ *     tags: [Admin, Security]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ipRange: { type: string, example: "1.2.3.4" }
+ *               reason: { type: string, example: "Suspicious activity" }
+ *     responses:
+ *       201:
+ *         description: IP rule created
+ */
+router.get("/security/blocklist", asyncHandler(AdminController.listBlocklistRules));
+router.post("/security/blocklist", asyncHandler(AdminController.addBlocklistRule));
+
+/**
+ * @swagger
+ * /admin/security/blocklist/{id}:
+ *   delete:
+ *     summary: Remove an IP rule from the blocklist
+ *     tags: [Admin, Security]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: IP rule removed
+ */
+router.delete("/security/blocklist/:id", asyncHandler(AdminController.removeBlocklistRule));
+
+/**
+ * @swagger
+ * /admin/security/allowlist:
+ *   post:
+ *     summary: Add an IP or CIDR to the admin allowlist
+ *     tags: [Admin, Security]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ipRange: { type: string, example: "127.0.0.1" }
+ *               reason: { type: string, example: "Admin office VPN" }
+ *     responses:
+ *       201:
+ *         description: Admin allowlist rule added
+ */
+router.post("/security/allowlist", asyncHandler(AdminController.addAdminAllowlistRule));
 
 // ── Moderation Routes ────────────────────────────────────────────────────────
 
