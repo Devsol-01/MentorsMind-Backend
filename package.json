@@ -12,7 +12,13 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["mentorminds", "stellar", "blockchain", "api", "express"],
+  "keywords": [
+    "mentorminds",
+    "stellar",
+    "blockchain",
+    "api",
+    "express"
+  ],
   "author": "MentorMinds Team",
   "license": "MIT",
   "type": "commonjs",
@@ -35,6 +41,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^25.3.3",
+    "@types/pg": "^8.20.0",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "eslint": "^10.0.2",

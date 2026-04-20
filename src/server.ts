@@ -5,6 +5,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
+import authRoutes from './routes/auth.routes';
+import { testConnection } from './config/database';
+import { testStellarConnection } from './config/stellar';
 
 // Load environment variables
 dotenv.config();
@@ -23,7 +26,7 @@ app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'success',
     message: 'MentorMinds Backend API is running',
@@ -32,8 +35,11 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Mount routes
+app.use('/api/v1/auth', authRoutes);
+
 // API Routes
-app.get('/api/v1', (req, res) => {
+app.get('/api/v1', (_req, res) => {
   res.status(200).json({
     status: 'success',
     message: 'Welcome to MentorMinds Stellar API',
@@ -57,11 +63,14 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 API URL: http://localhost:${PORT}/api/v1`);
   console.log(`💚 Health check: http://localhost:${PORT}/health`);
+  // Verify external connections on boot
+  await testConnection();
+  await testStellarConnection();
 });
 
 export default app;
