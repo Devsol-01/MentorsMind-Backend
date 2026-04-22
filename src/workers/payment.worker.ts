@@ -50,10 +50,9 @@ export async function pollPaymentStatus(
   if (hash) {
     try {
       // submitTransaction will throw if the tx is not found/failed;
-      // we use getAccount as a proxy — a real implementation would query Horizon directly.
       // For now, treat any successful response as confirmation.
-      const account = await stellarService.getAccount(hash).catch(() => null);
-      const confirmed = account !== null;
+      const tx = await stellarService.getTransaction(hash).catch(() => null);
+      const confirmed = tx?.successful === true;
 
       if (confirmed) {
         await pool.query(

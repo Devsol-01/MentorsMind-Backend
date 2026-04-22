@@ -1,21 +1,19 @@
-import pool from "../../config/database";
 import { Job } from "bullmq";
+import pool from "../../config/database";
 import { stellarService } from "../../services/stellar.service";
-import { pollPaymentStatus } from "../payment.worker";
 import { AuditLoggerService } from "../../services/audit-logger.service";
+import { logger } from "../../utils/logger.utils";
 
-// Mock external dependencies
 jest.mock("../../config/database", () => ({
   __esModule: true,
   default: {
     query: jest.fn(),
   },
-  query: jest.fn(),
 }));
 
 jest.mock("../../services/stellar.service", () => ({
   stellarService: {
-    getAccount: jest.fn(),
+    getTransaction: jest.fn(),
   },
 }));
 
@@ -30,8 +28,12 @@ jest.mock("../../utils/logger.utils", () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
 }));
+
+// We need to import the function to test it
+import { pollPaymentStatus } from "../payment.worker";
 
 describe("Payment Worker Unit Tests", () => {
   const mockJob = (data: any) =>
@@ -46,7 +48,7 @@ describe("Payment Worker Unit Tests", () => {
     jest.clearAllMocks();
   });
 
-  it("should query the transactions table and update it to completed", async () => {
+  it("marks payment completed when Stellar tx is successful", async () => {
     const paymentId = "tx-123";
     const userId = "user-456";
     const transactionHash = "hash-789";
@@ -56,9 +58,10 @@ describe("Payment Worker Unit Tests", () => {
       rows: [{ status: "pending", stellar_tx_hash: transactionHash }],
     });
 
-    // Mock StellarService to return a confirmed account
-    (stellarService.getAccount as jest.Mock).mockResolvedValue({
-      id: "stellar-acc",
+    // Mock StellarService to return a successful transaction
+    (stellarService.getTransaction as jest.Mock).mockResolvedValue({
+      successful: true,
+      hash: transactionHash,
     });
 
     // Mock update query
@@ -81,10 +84,10 @@ describe("Payment Worker Unit Tests", () => {
       [paymentId],
     );
 
-    expect(stellarService.getAccount).toHaveBeenCalledWith(transactionHash);
+    expect(stellarService.getTransaction).toHaveBeenCalledWith(transactionHash);
   });
 
-  it("should throw error if transaction is still pending", async () => {
+  it("retries when Stellar tx is not yet successful", async () => {
     const paymentId = "tx-123";
     const userId = "user-456";
     const transactionHash = "hash-789";
@@ -93,13 +96,39 @@ describe("Payment Worker Unit Tests", () => {
       rows: [{ status: "pending", stellar_tx_hash: transactionHash }],
     });
 
-    // Mock StellarService to simulate not found
-    (stellarService.getAccount as jest.Mock).mockRejectedValue(
-      new Error("Not found"),
-    );
+    (stellarService.getTransaction as jest.Mock).mockResolvedValue({
+      successful: false,
+      hash: transactionHash,
+    });
 
     const job = mockJob({ paymentId, userId, transactionHash });
-
     await expect(pollPaymentStatus(job)).rejects.toThrow(/still pending/);
+
+    expect(pool.query).toHaveBeenCalledTimes(1); // Only SELECT
+  });
+
+  it("retries when Stellar lookup throws", async () => {
+    const paymentId = "tx-123";
+    (pool.query as jest.Mock).mockResolvedValueOnce({
+      rows: [{ status: "pending", stellar_tx_hash: "hash" }],
+    });
+    (stellarService.getTransaction as jest.Mock).mockRejectedValue(
+      new Error("Horizon timeout"),
+    );
+
+    const job = mockJob({ paymentId, userId: "user", transactionHash: "hash" });
+    await expect(pollPaymentStatus(job)).rejects.toThrow(/still pending/);
+  });
+
+  it("skips Stellar check and returns early when payment already resolved", async () => {
+    const paymentId = "tx-123";
+    (pool.query as jest.Mock).mockResolvedValueOnce({
+      rows: [{ status: "completed", stellar_tx_hash: "hash" }],
+    });
+
+    const job = mockJob({ paymentId, userId: "user", transactionHash: "hash" });
+    await pollPaymentStatus(job);
+
+    expect(stellarService.getTransaction).not.toHaveBeenCalled();
   });
 });
