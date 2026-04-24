@@ -166,7 +166,7 @@ export class EscrowApiService {
    */
   static async resolveDispute(
     escrowId: string,
-    resolution: 'release_to_mentor' | 'refund_to_learner',
+    resolution: 'release_to_mentor' | 'refund_to_mentee',
     notes?: string,
     stellarTxHash?: string,
     splitPercentage?: number,
