@@ -112,7 +112,7 @@ describe("BookingsService", () => {
       mockPool.query.mockResolvedValue({
         rows: [
           { id: "mentee-1", role: "mentee" },
-          { id: "mentor-1", role: "mentee" },
+
         ],
       });
 
