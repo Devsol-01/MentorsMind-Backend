@@ -1,48 +1,26 @@
-jest.mock("../../config", () => ({
+import { Job } from "bullmq";
+import pool from "../../config/database";
+import { stellarService } from "../../services/stellar.service";
+import { AuditLoggerService } from "../../services/audit-logger.service";
+import { logger } from "../../utils/logger.utils";
+
+jest.mock("../../config/database", () => ({
+  __esModule: true,
   default: {
-    redis: { url: "redis://localhost:6379" },
-    db: {
-      url: "postgresql://localhost/test",
-      host: "localhost",
-      port: 5432,
-      name: "test",
-      user: "test",
-      password: "test",
-      poolMax: 5,
-      idleTimeoutMs: 1000,
-      connectionTimeoutMs: 1000,
-    },
+    query: jest.fn(),
   },
 }));
 
-jest.mock("../../queues/queue.config", () => ({
-  redisConnection: { host: "localhost", port: 6379 },
-  QUEUE_NAMES: { PAYMENT_POLL: "payment-poll-queue" },
-  CONCURRENCY: { PAYMENT_POLL: 3 },
-}));
-
-jest.mock("pg", () => ({
-  Pool: jest.fn().mockImplementation(() => ({
-    query: jest.fn(),
-    connect: jest.fn(),
-    end: jest.fn(),
-    on: jest.fn(),
-  })),
-}));
-
-const mockDbQuery = jest.fn();
-jest.mock("../../config/database", () => ({
-  default: { query: mockDbQuery },
-  __esModule: true,
-}));
-
-const mockGetTransaction = jest.fn();
 jest.mock("../../services/stellar.service", () => ({
-  stellarService: { getTransaction: mockGetTransaction },
+  stellarService: {
+    getTransaction: jest.fn(),
+  },
 }));
 
 jest.mock("../../services/audit-logger.service", () => ({
-  AuditLoggerService: { logEvent: jest.fn().mockResolvedValue(undefined) },
+  AuditLoggerService: {
+    logEvent: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 jest.mock("../../utils/logger.utils", () => ({
@@ -54,78 +32,103 @@ jest.mock("../../utils/logger.utils", () => ({
   },
 }));
 
-let capturedProcessor: Function;
-jest.mock("bullmq", () => ({
-  Worker: jest.fn().mockImplementation((_name: string, processor: Function) => {
-    capturedProcessor = processor;
-    return { on: jest.fn(), close: jest.fn() };
-  }),
-}));
+// We need to import the function to test it
+import { pollPaymentStatus } from "../payment.worker";
 
-import "../payment.worker";
+describe("Payment Worker Unit Tests", () => {
+  const mockJob = (data: any) =>
+    ({
+      id: "test-job-id",
+      data,
+      attemptsMade: 0,
+      opts: { attempts: 20 },
+    }) as Job;
 
-describe("Payment Worker — Stellar verification", () => {
-  const mockJob = {
-    id: "job-1",
-    attemptsMade: 0,
-    opts: { attempts: 20 },
-    data: {
-      paymentId: "pay-1",
-      userId: "user-1",
-      transactionHash: "abc123hash",
-    },
-  } as any;
-
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   it("marks payment completed when Stellar tx is successful", async () => {
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [{ status: "pending", transaction_hash: null }],
+    const paymentId = "tx-123";
+    const userId = "user-456";
+    const transactionHash = "hash-789";
+
+    // Mock initial query to fetch transaction
+    (pool.query as jest.Mock).mockResolvedValueOnce({
+      rows: [{ status: "pending", stellar_tx_hash: transactionHash }],
     });
-    mockGetTransaction.mockResolvedValueOnce({
+
+    // Mock StellarService to return a successful transaction
+    (stellarService.getTransaction as jest.Mock).mockResolvedValue({
       successful: true,
-      hash: "abc123hash",
+      hash: transactionHash,
     });
-    mockDbQuery.mockResolvedValueOnce({ rows: [] }); // UPDATE
 
-    await capturedProcessor(mockJob);
+    // Mock update query
+    (pool.query as jest.Mock).mockResolvedValueOnce({ rows: [] });
 
-    expect(mockGetTransaction).toHaveBeenCalledWith("abc123hash");
-    expect(mockDbQuery).toHaveBeenCalledWith(
-      expect.stringContaining("status = 'completed'"),
-      ["pay-1"],
+    const job = mockJob({ paymentId, userId, transactionHash });
+    await pollPaymentStatus(job);
+
+    // Verify correct table and column names in SELECT
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "SELECT status, stellar_tx_hash FROM transactions WHERE id = $1",
+      ),
+      [paymentId],
     );
+
+    // Verify correct table name in UPDATE
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE transactions SET status = 'completed'"),
+      [paymentId],
+    );
+
+    expect(stellarService.getTransaction).toHaveBeenCalledWith(transactionHash);
   });
 
   it("retries when Stellar tx is not yet successful", async () => {
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [{ status: "pending", transaction_hash: null }],
-    });
-    mockGetTransaction.mockResolvedValueOnce({
-      successful: false,
-      hash: "abc123hash",
+    const paymentId = "tx-123";
+    const userId = "user-456";
+    const transactionHash = "hash-789";
+
+    (pool.query as jest.Mock).mockResolvedValueOnce({
+      rows: [{ status: "pending", stellar_tx_hash: transactionHash }],
     });
 
-    await expect(capturedProcessor(mockJob)).rejects.toThrow("still pending");
-    expect(mockDbQuery).toHaveBeenCalledTimes(1); // only the SELECT, no UPDATE
+    (stellarService.getTransaction as jest.Mock).mockResolvedValue({
+      successful: false,
+      hash: transactionHash,
+    });
+
+    const job = mockJob({ paymentId, userId, transactionHash });
+    await expect(pollPaymentStatus(job)).rejects.toThrow(/still pending/);
+
+    expect(pool.query).toHaveBeenCalledTimes(1); // Only SELECT
   });
 
   it("retries when Stellar lookup throws", async () => {
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [{ status: "pending", transaction_hash: null }],
+    const paymentId = "tx-123";
+    (pool.query as jest.Mock).mockResolvedValueOnce({
+      rows: [{ status: "pending", stellar_tx_hash: "hash" }],
     });
-    mockGetTransaction.mockRejectedValueOnce(new Error("Horizon timeout"));
+    (stellarService.getTransaction as jest.Mock).mockRejectedValue(
+      new Error("Horizon timeout"),
+    );
 
-    await expect(capturedProcessor(mockJob)).rejects.toThrow("still pending");
+    const job = mockJob({ paymentId, userId: "user", transactionHash: "hash" });
+    await expect(pollPaymentStatus(job)).rejects.toThrow(/still pending/);
   });
 
-  it("skips Stellar check and returns early when payment already completed", async () => {
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [{ status: "completed", transaction_hash: "abc123hash" }],
+  it("skips Stellar check and returns early when payment already resolved", async () => {
+    const paymentId = "tx-123";
+    (pool.query as jest.Mock).mockResolvedValueOnce({
+      rows: [{ status: "completed", stellar_tx_hash: "hash" }],
     });
 
-    await capturedProcessor(mockJob);
+    const job = mockJob({ paymentId, userId: "user", transactionHash: "hash" });
+    await pollPaymentStatus(job);
 
-    expect(mockGetTransaction).not.toHaveBeenCalled();
+    expect(stellarService.getTransaction).not.toHaveBeenCalled();
   });
 });

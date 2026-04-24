@@ -16,10 +16,10 @@ const connection = {
   password: url.password || undefined,
 };
 
-export const exportQueue = new Queue('export-queue', { connection });
+export const exportQueue = new Queue("export-queue", { connection });
 
 export const exportWorker = new Worker(
-  'export-queue',
+  "export-queue",
   async (job: Job) => {
     const { userId, jobId, type } = job.data;
     
@@ -31,27 +31,27 @@ export const exportWorker = new Worker(
       await ExportService.processExport(userId, jobId);
     }
   },
-  { connection, concurrency: 5 }
+  { connection, concurrency: 5 },
 );
 
-exportWorker.on('completed', (job) => {
+exportWorker.on("completed", (job) => {
   logger.info(`Export job ${job.id} completed`);
 });
 
-exportWorker.on('failed', async (job, err) => {
+exportWorker.on("failed", async (job, err) => {
   logger.error(`Export job ${job?.id} failed`, { error: err.message });
   if (job) {
     const { jobId, userId } = job.data;
-    await ExportJobModel.updateStatus(jobId, 'failed', undefined, err.message);
-    
+    await ExportJobModel.updateStatus(jobId, "failed", undefined, err.message);
+
     await AuditLoggerService.logEvent({
       level: LogLevel.ERROR,
-      action: 'DATA_EXPORT_FAILED',
+      action: "DATA_EXPORT_FAILED",
       message: `Data export failed for user ${userId}: ${err.message}`,
       userId: userId,
-      entityType: 'export_job',
+      entityType: "export_job",
       entityId: jobId,
-      metadata: { error: err.message }
+      metadata: { error: err.message },
     });
   }
 });

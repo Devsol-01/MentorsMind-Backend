@@ -1,10 +1,21 @@
 // @ts-nocheck
-import { Horizon, TransactionBuilder, StrKey, Operation, Asset } from '@stellar/stellar-sdk';
-import { server, backupServer, networkPassphrase, getPlatformKeypair } from '../config/stellar';
-import { CacheService } from './cache.service';
-import { CacheKeys, CacheTTL } from '../utils/cache-key.utils';
-import { logger } from '../utils/logger.utils';
-import { parseAccountInfo, withRetry, TtlCache } from '../utils/stellar.utils';
+import {
+  Horizon,
+  TransactionBuilder,
+  StrKey,
+  Operation,
+  Asset,
+} from "@stellar/stellar-sdk";
+import {
+  server,
+  backupServer,
+  networkPassphrase,
+  getPlatformKeypair,
+} from "../config/stellar";
+import { CacheService } from "./cache.service";
+import { CacheKeys, CacheTTL } from "../utils/cache-key.utils";
+import { logger } from "../utils/logger.utils";
+import { parseAccountInfo, withRetry, TtlCache } from "../utils/stellar.utils";
 import type {
   StellarAccountInfo,
   StellarTransactionResult,
@@ -111,12 +122,12 @@ class StellarService {
   ): Promise<string> {
     const keypair = getPlatformKeypair();
     if (!keypair) {
-      throw new Error('Platform keypair not configured');
+      throw new Error("Platform keypair not configured");
     }
 
     const account = await this.getAccount(keypair.publicKey());
     const txBuilder = new TransactionBuilder(account, {
-      fee: '100',
+      fee: "100",
       networkPassphrase,
     });
 
@@ -130,7 +141,7 @@ class StellarService {
 
     const tx = txBuilder.setTimeout(30).build();
     tx.sign(keypair);
-    return tx.toEnvelope().toXDR('base64');
+    return tx.toEnvelope().toXDR("base64");
   }
 
   /**

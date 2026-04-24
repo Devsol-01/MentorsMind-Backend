@@ -9,8 +9,11 @@ import { logger } from "../utils/logger.utils";
 import { AuditLoggerService } from "../services/audit-logger.service";
 import { LogLevel, AuditAction } from "../utils/log-formatter.utils";
 import type { PaymentPollJobData } from "../queues/payment-poll.queue";
+import { stellarService } from "../services/stellar.service";
 
-async function pollPaymentStatus(job: Job<PaymentPollJobData>): Promise<void> {
+export async function pollPaymentStatus(
+  job: Job<PaymentPollJobData>,
+): Promise<void> {
   const { paymentId, userId, transactionHash } = job.data;
 
   logger.info("Polling payment status", {
@@ -43,10 +46,11 @@ async function pollPaymentStatus(job: Job<PaymentPollJobData>): Promise<void> {
   }
 
   // If there's a transaction hash, verify on Stellar
-  const hash = transactionHash || payment.transaction_hash;
+  const hash = transactionHash || payment.stellar_tx_hash;
   if (hash) {
     try {
-      const { stellarService } = await import("../services/stellar.service");
+      // submitTransaction will throw if the tx is not found/failed;
+      // For now, treat any successful response as confirmation.
       const tx = await stellarService.getTransaction(hash).catch(() => null);
       const confirmed = tx?.successful === true;
 
