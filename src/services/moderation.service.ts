@@ -48,11 +48,30 @@ export const ModerationService = {
     flaggerId: string,
     reason: string,
   ): Promise<FlagRecord> {
+    // Check if user has already flagged this entity
+    const checkQuery = `
+       SELECT id FROM flags
+       WHERE entity_type = $1 AND entity_id = $2 AND flagger_id = $3
+     `;
+
+    const { rows } = await pool.query(checkQuery, [
+      entityType,
+      entityId,
+      flaggerId,
+    ]);
+
+    if (rows.length > 0) {
+      // User has already flagged this entity
+      const error: any = new Error("User has already flagged this content");
+      error.statusCode = 409;
+      throw error;
+    }
+
     const query = `
-      INSERT INTO flags (entity_type, entity_id, flagger_id, reason, status)
-      VALUES ($1, $2, $3, $4, 'pending')
-      RETURNING *
-    `;
+       INSERT INTO flags (entity_type, entity_id, flagger_id, reason, status)
+       VALUES ($1, $2, $3, $4, 'pending')
+       RETURNING *
+     `;
 
     const { rows } = await pool.query<FlagRecord>(query, [
       entityType,
@@ -80,10 +99,10 @@ export const ModerationService = {
    */
   async checkAutoHide(entityType: string, entityId: string): Promise<void> {
     const countQuery = `
-      SELECT COUNT(*) as flag_count
-      FROM flags
-      WHERE entity_type = $1 AND entity_id = $2 AND status = 'pending'
-    `;
+       SELECT COUNT(DISTINCT flagger_id) as flag_count
+       FROM flags
+       WHERE entity_type = $1 AND entity_id = $2 AND status = 'pending'
+     `;
 
     const { rows } = await pool.query(countQuery, [entityType, entityId]);
     const flagCount = parseInt(rows[0].flag_count, 10);
@@ -105,9 +124,10 @@ export const ModerationService = {
    */
   async hideContent(entityType: string, entityId: string): Promise<void> {
     if (entityType === "review") {
-      await pool.query(`UPDATE reviews SET is_published = false WHERE id = $1`, [
-        entityId,
-      ]);
+      await pool.query(
+        `UPDATE reviews SET is_published = false WHERE id = $1`,
+        [entityId],
+      );
     } else if (
       ["mentor_bio", "profile_photo", "user_profile"].includes(entityType)
     ) {
