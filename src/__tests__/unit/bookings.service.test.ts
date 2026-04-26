@@ -80,7 +80,7 @@ describe("BookingsService", () => {
     it("crea reserva cuando usuarios y horario son válidos", async () => {
       mockPool.query.mockResolvedValue({
         rows: [
-          { id: "mentee-1", role: "learner" },
+          { id: "mentee-1", role: "mentee" },
           { id: "mentor-1", role: "mentor" },
         ],
       });
@@ -118,7 +118,7 @@ describe("BookingsService", () => {
       mockPool.query.mockResolvedValue({
         rows: [
           { id: "mentee-1", role: "mentee" },
-          { id: "mentor-1", role: "mentor" },
+
         ],
       });
 
@@ -130,7 +130,7 @@ describe("BookingsService", () => {
     it("detecta conflicto de agenda", async () => {
       mockPool.query.mockResolvedValue({
         rows: [
-          { id: "mentee-1", role: "learner" },
+          { id: "mentee-1", role: "mentee" },
           { id: "mentor-1", role: "mentor" },
         ],
       });
